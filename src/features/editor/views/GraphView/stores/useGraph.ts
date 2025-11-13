@@ -104,3 +104,35 @@ const useGraph = create<Graph & GraphActions>((set, get) => ({
 }));
 
 export default useGraph;
+
+// Listen for node updates dispatched from UI (inline editors, modals, etc.)
+// When a `node:update` event is emitted with { id, text } we update the nodes
+// array and selectedNode in the zustand store so the visual graph re-renders.
+if (typeof window !== "undefined") {
+  // guard against multiple attachments (HMR)
+  const key = "__jsoncrack_node_update_listener_attached";
+  if (!(window as any)[key]) {
+    window.addEventListener("node:update", (ev: Event) => {
+      try {
+        const custom = ev as CustomEvent;
+        const detail = custom?.detail;
+        if (!detail) return;
+
+        const id: number | string | undefined = detail.id ?? detail?.id;
+        const text = detail.text ?? detail?.text;
+
+        if (id === undefined) return;
+
+        useGraph.setState(prev => {
+          const updatedNodes = prev.nodes.map(n => (n.id === id ? { ...n, text: text ?? n.text } : n));
+          const updatedSelected = prev.selectedNode?.id === id ? { ...prev.selectedNode, text: text ?? prev.selectedNode.text } : prev.selectedNode;
+          return { nodes: updatedNodes, selectedNode: updatedSelected } as any;
+        });
+      } catch (e) {
+        // ignore listener errors
+      }
+    });
+
+    (window as any)[key] = true;
+  }
+}
